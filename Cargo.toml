@@ -1,0 +1,9 @@
+[package]
+name = "static_http_erver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.23.0", features = ["full"] } # async networking
+httparse = "1.9.5"
+flate2 = "1.0"

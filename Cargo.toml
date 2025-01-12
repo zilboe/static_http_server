@@ -1,5 +1,5 @@
 [package]
-name = "static_http_erver"
+name = "static_http_server"
 version = "0.1.0"
 edition = "2021"
 

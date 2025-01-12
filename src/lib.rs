@@ -3,6 +3,7 @@ use std::{
     io::{Read, Write},
     path::Path,
     ptr::eq,
+    sync::Arc,
 };
 
 use tokio::{
@@ -243,7 +244,7 @@ impl Default for StaticHttp<'static> {
     }
 }
 
-impl<'a> StaticHttp<'static> {
+impl<'a> StaticHttp<'a> {
     pub fn new() -> Self {
         StaticHttp {
             paths: None,
@@ -252,13 +253,13 @@ impl<'a> StaticHttp<'static> {
         }
     }
 
-    pub async fn bind(mut self, ip_port: &str) -> Result<Self, ()> {
+    pub async fn bind(mut self, ip_port: &'a str) -> Result<Self, ()> {
         let tcp_listen = match TcpListener::bind(ip_port).await {
             Ok(tcp_listen) => tcp_listen,
             Err(_) => {
                 let err_message = format!("Can't Bind The Addr {}", ip_port);
                 println!("{}", err_message);
-                return Err(());
+                return Err(())
             }
         };
         self.listen = Some(tcp_listen);
@@ -280,12 +281,21 @@ impl<'a> StaticHttp<'static> {
                 }
             };
             println!("The Server Start Listen!");
-            let top_path = self.paths.unwrap();
+            let top_path = match self.paths {
+                Some(paths) => paths.to_string(),
+                None => {
+                    println!("StaticHttp Path Error");
+                    return Err(())
+                }
+            };
+            let top_path_with_lifetime = Arc::new(top_path);
+
             loop {
                 match listener.accept().await {
                     Ok((socket, _)) => {
+                        let top_path = Arc::clone(&top_path_with_lifetime);
                         tokio::spawn(async move {
-                            static_http_handle_process(top_path, socket).await;
+                            static_http_handle_process(&top_path, socket).await;
                         });
                     }
                     Err(_) => {
@@ -299,7 +309,7 @@ impl<'a> StaticHttp<'static> {
         Ok(())
     }
 
-    pub fn route(mut self, route_path: &'static str) -> Result<Self, ()> {
+    pub fn route(mut self, route_path: &'a str) -> Result<Self, ()> {
         if !route_path.is_empty() {
             self.paths = Some(route_path);
         } else {

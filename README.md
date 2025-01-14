@@ -20,7 +20,15 @@ async fn main() {
 }
 ```
 
+config.json
+```json
+{
+    "ip_port": "127.0.0.1:80",
+    "web_page": "/var/www/html"
+}
+```
+
 run
 ```shell
-cargo run /var/www
+cargo run /var/www/config.json
 ```

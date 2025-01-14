@@ -1,42 +1,60 @@
+
 use std::{fs, env};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-struct Config {
-    ip_port: Option<String>,
-    web_port: Option<String>
+pub struct Config {
+    pub ip_port: String,
+    pub web_page: String
+}
+
+struct ConfigError<'a> {
+    message: &'a str
 }
 
 impl Config {
-    pub fn read_config() -> Self {
-        let configs = configs().unwrap();
-        Self { 
-            ip_port: configs.ip_port, 
-            web_port: configs.web_port,
+    pub fn read_config() -> Result<Self, ()> {
+        match configs() {
+            Ok(configs) => {
+                Ok(configs)
+            },
+            Err(e) => {
+                println!("{}", e.message);
+                return Err(())
+            }
         }
     }
 }
 
-fn configs() -> Result<Config, ()> {
+fn configs() -> Result<Config, ConfigError<'static>> {
     let env_arg: Vec<String> = env::args().collect();
     if env_arg.len() < 2 {
-        println!("Please Run The ({}) With Config", env_arg[0]);
-        return Err(())
+        let err = "Please Run The With Config";
+        return Err(
+            ConfigError { 
+                message: err
+         })
     }
     let config_content_res = fs::read_to_string(&env_arg[1]);
     let config_content = match config_content_res {
         Ok(config) => config,
         Err(_) => {
-            println!("Can't Read The Config");
-            return Err(())
+            let err = "Can't Read The Config";
+            return Err(
+                ConfigError { 
+                    message: err
+             })
         }
     };
     
     let configs = match serde_json::from_str(&config_content) {
         Ok(configs) => configs,
         Err(_) => {
-            println!("Can't Serialize The File Config");
-            return Err(())
+            let err = "Can't Serialize The File Config";
+            return Err(
+                ConfigError { 
+                    message: err
+             })
         }
     };
     Ok(configs)

@@ -229,27 +229,25 @@ impl RequestConfig {
 }
 
 #[warn(non_snake_case)]
-pub struct StaticHttp<'a> {
+pub struct HttpServer<'a> {
     listen: Option<tokio::net::TcpListener>,
 
     paths: Option<&'a str>,
     // #[warn(non_snake_case)]
     // #[warn(dead_code)]
-    //keep_alive_time: Option<usize>,
 }
 
-impl Default for StaticHttp<'static> {
+impl Default for HttpServer<'static> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> StaticHttp<'a> {
+impl<'a> HttpServer<'a> {
     pub fn new() -> Self {
-        StaticHttp {
+        HttpServer {
             paths: None,
             listen: None,
-            // keep_alive_time: None,
         }
     }
 
@@ -259,54 +257,51 @@ impl<'a> StaticHttp<'a> {
             Err(_) => {
                 let err_message = format!("Can't Bind The Addr {}", ip_port);
                 println!("{}", err_message);
-                return Err(())
+                return Err(());
             }
         };
         self.listen = Some(tcp_listen);
         Ok(self)
     }
 
-    pub async fn run(self, start: bool) -> Result<(), ()> {
-        if start {
-            if self.paths.is_none() {
-                println!("Please Fill in The Route Path \".route()\"");
-                return Err(());
+    pub async fn run(self) {
+        if self.paths.is_none() {
+            println!("Please Fill in The Route Path \".route()\"");
+            return
+        }
+        let listener = match self.listen {
+            Some(listener) => listener,
+            None => {
+                let err_message = "There is No Listener Used";
+                println!("{}", err_message);
+                return
             }
-            let listener = match self.listen {
-                Some(listener) => listener,
-                None => {
-                    let err_message = "There is No Listener Used";
-                    println!("{}", err_message);
-                    return Err(());
-                }
-            };
-            println!("The Server Start Listen!");
-            let top_path = match self.paths {
-                Some(paths) => paths.to_string(),
-                None => {
-                    println!("StaticHttp Path Error");
-                    return Err(())
-                }
-            };
-            let top_path_with_lifetime = Arc::new(top_path);
+        };
+        println!("The Server Start Listen!");
+        let top_path = match self.paths {
+            Some(paths) => paths.to_string(),
+            None => {
+                println!("StaticHttp Path Error");
+                return
+            }
+        };
+        let top_path_with_lifetime = Arc::new(top_path);
 
-            loop {
-                match listener.accept().await {
-                    Ok((socket, _)) => {
-                        let top_path = Arc::clone(&top_path_with_lifetime);
-                        tokio::spawn(async move {
-                            static_http_handle_process(&top_path, socket).await;
-                        });
-                    }
-                    Err(_) => {
-                        let err_message = "The Listener Accept Error,Please Check The Addr Port";
-                        println!("{}", err_message);
-                        return Err(());
-                    }
+        loop {
+            match listener.accept().await {
+                Ok((socket, _)) => {
+                    let top_path = Arc::clone(&top_path_with_lifetime);
+                    tokio::spawn(async move {
+                        static_http_handle_process(&top_path, socket).await;
+                    });
+                }
+                Err(_) => {
+                    let err_message = "The Listener Accept Error,Please Check The Addr Port";
+                    println!("{}", err_message);
+                    return
                 }
             }
         }
-        Ok(())
     }
 
     pub fn route(mut self, route_path: &'a str) -> Result<Self, ()> {
@@ -337,8 +332,8 @@ async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
     };
     match stream.write_all(&send_buffer).await {
         Ok(()) => {}
-        Err(_) => {
-            println!("The Stream Send Error")
+        Err(e) => {
+            println!("The Stream Send Error,{}...", e)
         }
     };
     match stream.shutdown().await {
@@ -356,8 +351,13 @@ mod tests {
     #[tokio::test]
     async fn http_server() {
         StaticHttp::new()
-            .bind("127.0.0.1:789").await.unwrap()
-            .route("C:\\Users\\Desktop\\website").unwrap()
-            .run(true).await.unwrap();
+            .bind("127.0.0.1:789")
+            .await
+            .unwrap()
+            .route("C:\\Users\\Desktop\\website")
+            .unwrap()
+            .run(true)
+            .await
+            .unwrap();
     }
 }

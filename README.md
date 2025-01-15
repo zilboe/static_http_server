@@ -7,16 +7,16 @@ No other mechanism exists
 
 main
 ```rust
-use http_server::StaticHttp;
+use http_server::HttpServer;
 use config::Config;
 #[tokio::main]
 async fn main() {
     let config = Config::read_config().unwrap();
 
-    StaticHttp::new()
+    HttpServer::new()
     .bind(&config.ip_port).await.unwrap()
     .route(&config.web_page).unwrap()
-    .run(true).await.unwrap();
+    .run().await;
 }
 ```
 
@@ -30,5 +30,5 @@ config.json
 
 run
 ```shell
-cargo run /var/www/config.json
+./http_server config.json
 ```

@@ -233,8 +233,8 @@ pub struct HttpServer<'a> {
     listen: Option<tokio::net::TcpListener>,
 
     paths: Option<&'a str>,
-    // #[warn(non_snake_case)]
-    // #[warn(dead_code)]
+ 
+    keep_alive_timeout: Option<u64>,
 }
 
 impl Default for HttpServer<'static> {
@@ -248,7 +248,13 @@ impl<'a> HttpServer<'a> {
         HttpServer {
             paths: None,
             listen: None,
+            keep_alive_timeout: None,
         }
+    }
+
+    pub fn set_keepalive(mut self, keep_alive_timeout: u64) -> Self {
+        self.keep_alive_timeout = Some(keep_alive_timeout);
+        self
     }
 
     pub async fn bind(mut self, ip_port: &'a str) -> Result<Self, ()> {
@@ -292,7 +298,7 @@ impl<'a> HttpServer<'a> {
                 Ok((socket, _)) => {
                     let top_path = Arc::clone(&top_path_with_lifetime);
                     tokio::spawn(async move {
-                        static_http_handle_process(&top_path, socket).await;
+                            static_http_handle_process(&top_path, socket, self.keep_alive_timeout).await;
                     });
                 }
                 Err(_) => {
@@ -316,7 +322,7 @@ impl<'a> HttpServer<'a> {
     }
 }
 
-async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
+async fn static_http_handle_process(top_path: &str, mut stream: TcpStream, keep_alive_timeout: Option<u64>) {
     let mut recv_request_buffer: [u8; 2048] = [0; 2048];
     let mut request_config = RequestConfig::new();
     let send_buffer = match stream.read(&mut recv_request_buffer).await {
@@ -336,12 +342,17 @@ async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
             println!("The Stream Send Error,{}...", e)
         }
     };
-    match stream.shutdown().await {
-        Ok(()) => {}
-        Err(_) => {
-            println!("The Stream Shutdown Error")
+    if keep_alive_timeout.is_some() {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(keep_alive_timeout.unwrap()));
+        tokio::select! {
+        _ = interval.tick() => {
+            println!("Connection timed out");
         }
-    };
+        _ = stream.shutdown() => {}
+        }
+    } else {
+        stream.shutdown().await.unwrap_or_else(|e| println!("The Stream Shutdown Error: {}", e));
+    }
 }
 
 #[cfg(test)]

@@ -350,14 +350,13 @@ mod tests {
 
     #[tokio::test]
     async fn http_server() {
-        StaticHttp::new()
+        HttpServer::new()
             .bind("127.0.0.1:789")
             .await
             .unwrap()
             .route("C:\\Users\\Desktop\\website")
             .unwrap()
-            .run(true)
+            .run()
             .await
-            .unwrap();
     }
 }

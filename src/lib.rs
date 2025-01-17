@@ -209,7 +209,7 @@ impl RequestConfig {
             if header_item.name.eq_ignore_ascii_case("Accept-Encoding") {
                 self.set_encode(std::str::from_utf8(header_item.value).unwrap());
             }
-            if header_item.name.eq_ignore_ascii_case("keep-alive") {
+            if header_item.name.eq_ignore_ascii_case("Connection") {
                 self.set_keep_alive(std::str::from_utf8(header_item.value).unwrap());
             }
         }

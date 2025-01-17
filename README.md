@@ -15,6 +15,7 @@ async fn main() {
 
     HttpServer::new()
     .bind(&config.ip_port).await.unwrap()
+    .set_keepalive(60)
     .route(&config.web_page).unwrap()
     .run().await;
 }

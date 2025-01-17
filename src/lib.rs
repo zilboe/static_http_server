@@ -9,6 +9,7 @@ use std::{
 use tokio::{
     io::{self, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    time::{sleep, Duration},
 };
 
 use flate2::write::GzEncoder;
@@ -325,34 +326,48 @@ impl<'a> HttpServer<'a> {
 async fn static_http_handle_process(top_path: &str, mut stream: TcpStream, keep_alive_timeout: Option<u64>) {
     let mut recv_request_buffer: [u8; 2048] = [0; 2048];
     let mut request_config = RequestConfig::new();
-    let send_buffer = match stream.read(&mut recv_request_buffer).await {
-        Ok(recv_size) => {
-            let capture_request_buffer = &recv_request_buffer[..recv_size];
-            request_config.static_http_process_request(top_path, capture_request_buffer)
+    loop {
+        let send_buffer = match stream.read(&mut recv_request_buffer).await {
+            Ok(recv_size) => {
+                if recv_size == 0 {
+                    break;
+                }
+                let capture_request_buffer = &recv_request_buffer[..recv_size];
+                request_config.static_http_process_request(top_path, capture_request_buffer)
+            }
+            Err(_) => {
+                let err_message = format!("The ({:?}) Recv Error", stream);
+                println!("{}", err_message);
+                return;
+            }
+        };
+        match stream.write_all(&send_buffer).await {
+            Ok(()) => {}
+            Err(e) => {
+                println!("The Stream Send Error,{}...", e);
+                return;
+            }
+        };
+
+        // 检查 keep-alive 头，如果不需要保持连接，则关闭 stream
+        if !request_config.keep_alive {
+            break;
         }
-        Err(_) => {
-            let err_message = format!("The ({:?}) Recv Error", stream);
-            println!("{}", err_message);
-            return;
+
+        // 如果设置了 keep_alive_timeout，则等待指定时间
+        if let Some(timeout) = keep_alive_timeout {
+            sleep(Duration::from_secs(timeout)).await;
         }
-    };
-    match stream.write_all(&send_buffer).await {
+    }
+
+    // 显式地关闭 stream
+    match stream.shutdown().await {
         Ok(()) => {}
         Err(e) => {
-            println!("The Stream Send Error,{}...", e)
+            println!("The Stream Shutdown Error,{}...", e);
         }
-    };
-    if keep_alive_timeout.is_some() {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(keep_alive_timeout.unwrap()));
-        tokio::select! {
-        _ = interval.tick() => {
-            println!("Connection timed out");
-        }
-        _ = stream.shutdown() => {}
-        }
-    } else {
-        stream.shutdown().await.unwrap_or_else(|e| println!("The Stream Shutdown Error: {}", e));
     }
+    println!("Close The Stream");
 }
 
 #[cfg(test)]
@@ -365,7 +380,8 @@ mod tests {
             .bind("127.0.0.1:789")
             .await
             .unwrap()
-            .route("C:\\Users\\Desktop\\website")
+            .set_keepalive(60)
+            .route("C:\\Users\\Desktop\\html")
             .unwrap()
             .run()
             .await

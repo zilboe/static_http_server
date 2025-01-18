@@ -328,21 +328,10 @@ async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
             return;
         }
     };
-    match stream.write_all(&send_buffer).await {
-        Ok(()) => {}
-        Err(e) => {
-            println!("The Stream Send Error,{}...", e);
-            return;
-        }
-    };
+    
+    stream.write_all(&send_buffer).await.unwrap();
 
-    match stream.shutdown().await {
-        Ok(()) => {}
-        Err(e) => {
-            println!("The Stream Shutdown Error,{}...", e);
-        }
-    }
-    println!("Close The Stream");
+    stream.shutdown().await.unwrap();
 }
 
 #[cfg(test)]

@@ -9,7 +9,6 @@ use std::{
 use tokio::{
     io::{self, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    time::{sleep, Duration},
 };
 
 use flate2::write::GzEncoder;
@@ -229,13 +228,11 @@ impl RequestConfig {
     }
 }
 
-#[warn(non_snake_case)]
+#[allow(non_snake_case)]
 pub struct HttpServer<'a> {
     listen: Option<tokio::net::TcpListener>,
 
     paths: Option<&'a str>,
- 
-    keep_alive_timeout: Option<u64>,
 }
 
 impl Default for HttpServer<'static> {
@@ -249,13 +246,7 @@ impl<'a> HttpServer<'a> {
         HttpServer {
             paths: None,
             listen: None,
-            keep_alive_timeout: None,
         }
-    }
-
-    pub fn set_keepalive(mut self, keep_alive_timeout: u64) -> Self {
-        self.keep_alive_timeout = Some(keep_alive_timeout);
-        self
     }
 
     pub async fn bind(mut self, ip_port: &'a str) -> Result<Self, ()> {
@@ -274,14 +265,14 @@ impl<'a> HttpServer<'a> {
     pub async fn run(self) {
         if self.paths.is_none() {
             println!("Please Fill in The Route Path \".route()\"");
-            return
+            return;
         }
         let listener = match self.listen {
             Some(listener) => listener,
             None => {
                 let err_message = "There is No Listener Used";
                 println!("{}", err_message);
-                return
+                return;
             }
         };
         println!("The Server Start Listen!");
@@ -289,7 +280,7 @@ impl<'a> HttpServer<'a> {
             Some(paths) => paths.to_string(),
             None => {
                 println!("StaticHttp Path Error");
-                return
+                return;
             }
         };
         let top_path_with_lifetime = Arc::new(top_path);
@@ -299,13 +290,13 @@ impl<'a> HttpServer<'a> {
                 Ok((socket, _)) => {
                     let top_path = Arc::clone(&top_path_with_lifetime);
                     tokio::spawn(async move {
-                            static_http_handle_process(&top_path, socket, self.keep_alive_timeout).await;
+                        static_http_handle_process(&top_path, socket).await;
                     });
                 }
                 Err(_) => {
                     let err_message = "The Listener Accept Error,Please Check The Addr Port";
                     println!("{}", err_message);
-                    return
+                    return;
                 }
             }
         }
@@ -323,44 +314,28 @@ impl<'a> HttpServer<'a> {
     }
 }
 
-async fn static_http_handle_process(top_path: &str, mut stream: TcpStream, keep_alive_timeout: Option<u64>) {
+async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
     let mut recv_request_buffer: [u8; 2048] = [0; 2048];
     let mut request_config = RequestConfig::new();
-    loop {
-        let send_buffer = match stream.read(&mut recv_request_buffer).await {
-            Ok(recv_size) => {
-                if recv_size == 0 {
-                    break;
-                }
-                let capture_request_buffer = &recv_request_buffer[..recv_size];
-                request_config.static_http_process_request(top_path, capture_request_buffer)
-            }
-            Err(_) => {
-                let err_message = format!("The ({:?}) Recv Error", stream);
-                println!("{}", err_message);
-                return;
-            }
-        };
-        match stream.write_all(&send_buffer).await {
-            Ok(()) => {}
-            Err(e) => {
-                println!("The Stream Send Error,{}...", e);
-                return;
-            }
-        };
-
-        // 检查 keep-alive 头，如果不需要保持连接，则关闭 stream
-        if !request_config.keep_alive {
-            break;
+    let send_buffer = match stream.read(&mut recv_request_buffer).await {
+        Ok(recv_size) => {
+            let capture_request_buffer = &recv_request_buffer[..recv_size];
+            request_config.static_http_process_request(top_path, capture_request_buffer)
         }
-
-        // 如果设置了 keep_alive_timeout，则等待指定时间
-        if let Some(timeout) = keep_alive_timeout {
-            sleep(Duration::from_secs(timeout)).await;
+        Err(_) => {
+            let err_message = format!("The ({:?}) Recv Error", stream);
+            println!("{}", err_message);
+            return;
         }
-    }
+    };
+    match stream.write_all(&send_buffer).await {
+        Ok(()) => {}
+        Err(e) => {
+            println!("The Stream Send Error,{}...", e);
+            return;
+        }
+    };
 
-    // 显式地关闭 stream
     match stream.shutdown().await {
         Ok(()) => {}
         Err(e) => {
@@ -380,7 +355,6 @@ mod tests {
             .bind("127.0.0.1:789")
             .await
             .unwrap()
-            .set_keepalive(60)
             .route("C:\\Users\\Desktop\\html")
             .unwrap()
             .run()

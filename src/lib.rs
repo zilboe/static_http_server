@@ -86,7 +86,7 @@ impl RequestConfig {
         match file_name.find('.') {
             Some(pox) => {
                 let _file_type = match &file_name[pox..] {
-                    ".html" => "text/html",
+                    ".html" => "text/html; charset=UTF-8",
                     ".css" => "text/css",
                     ".bmp" => "application/x-bmp",
                     ".img" => "application/x-img",

@@ -14,6 +14,8 @@ use tokio::{
     time::interval
 };
 
+use chrono::{Days, Utc};
+
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
@@ -218,6 +220,14 @@ impl RequestConfig {
         if self.encoder {
             send_buffer.extend_from_slice(b"Content-Encoding: gzip\r\n");
         }
+
+        let now: chrono::DateTime<Utc> = Utc::now();
+        let date = format!("Date: {}\r\n", now.format("%a, %d %b %Y %H:%M:%S GMT"));
+        send_buffer.extend_from_slice(date.as_bytes());
+
+        let expire = now.checked_add_days(Days::new(3)).unwrap();
+        let expire_date = format!("expires: {}\r\n", expire.format("%a, %d %b %Y %H:%M:%S GMT"));
+        send_buffer.extend_from_slice(expire_date.as_bytes());
 
         send_buffer.extend_from_slice(b"Server: StaticHttp\r\n");
 

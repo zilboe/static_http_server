@@ -7,16 +7,17 @@ No other mechanism exists
 
 main
 ```rust
-use http_server::HttpServer;
 use config::Config;
+use http_server::HttpServer;
+
 #[tokio::main]
 async fn main() {
     let config = Config::read_config().unwrap();
-
     HttpServer::new()
-    .bind(&config.ip_port).await.unwrap()
-    .route(&config.web_page).unwrap()
-    .run().await;
+        .bind(&config.ip_port).await.unwrap()
+        .route(&config.web_page).unwrap()
+        .set_keep_alive(config.keepalive_timeout)
+        .run().await;
 }
 ```
 
@@ -24,7 +25,8 @@ config.json
 ```json
 {
     "ip_port": "127.0.0.1:80",
-    "web_page": "/var/www/html"
+    "web_page": "/var/www/html",
+    "keepalive_timeout": 60
 }
 ```
 

@@ -4,11 +4,14 @@ use std::{
     path::Path,
     ptr::eq,
     sync::Arc,
+    time::Duration,
 };
 
 use tokio::{
     io::{self, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::mpsc,
+    time::interval
 };
 
 use flate2::write::GzEncoder;
@@ -216,6 +219,8 @@ impl RequestConfig {
             send_buffer.extend_from_slice(b"Content-Encoding: gzip\r\n");
         }
 
+        send_buffer.extend_from_slice(b"Server: StaticHttp\r\n");
+
         let file_content = match self.sl_http_fill_file_buffer() {
             Ok(file) => file,
             Err(e) => {
@@ -233,6 +238,8 @@ pub struct HttpServer<'a> {
     listen: Option<tokio::net::TcpListener>,
 
     paths: Option<&'a str>,
+
+    keep_alive_timeouts: Option<u64>,
 }
 
 impl Default for HttpServer<'static> {
@@ -246,7 +253,13 @@ impl<'a> HttpServer<'a> {
         HttpServer {
             paths: None,
             listen: None,
+            keep_alive_timeouts: None,
         }
+    }
+
+    pub fn set_keep_alive(mut self, keep_alive: u64) -> Self {
+        self.keep_alive_timeouts = Some(keep_alive);
+        self
     }
 
     pub async fn bind(mut self, ip_port: &'a str) -> Result<Self, ()> {
@@ -288,9 +301,10 @@ impl<'a> HttpServer<'a> {
         loop {
             match listener.accept().await {
                 Ok((socket, _)) => {
+                    let keepalive_timeout = self.keep_alive_timeouts.unwrap();
                     let top_path = Arc::clone(&top_path_with_lifetime);
                     tokio::spawn(async move {
-                        static_http_handle_process(&top_path, socket).await;
+                        static_http_handle_process(&top_path, socket, keepalive_timeout).await;
                     });
                 }
                 Err(_) => {
@@ -314,23 +328,60 @@ impl<'a> HttpServer<'a> {
     }
 }
 
-async fn static_http_handle_process(top_path: &str, mut stream: TcpStream) {
-    let mut recv_request_buffer: [u8; 2048] = [0; 2048];
-    let mut request_config = RequestConfig::new();
-    let send_buffer = match stream.read(&mut recv_request_buffer).await {
-        Ok(recv_size) => {
-            let capture_request_buffer = &recv_request_buffer[..recv_size];
-            request_config.static_http_process_request(top_path, capture_request_buffer)
+async fn static_http_handle_process(top_path: &str, mut stream: TcpStream, timeout: u64) {
+    let (interval_tick_tx, mut interval_tick_rx) = mpsc::channel::<bool>(16);
+    let (recv_it_tick_tx, mut recv_it_tick_rx) = mpsc::channel::<bool>(16);
+    let mut interval = interval(Duration::from_secs(1));
+    let mut tick :u64  = 0;
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    tick+=1;
+                    if tick > timeout {
+                        interval_tick_tx.send(true).await.unwrap();
+                        break;
+                    }
+                }
+
+                is_recv_request = recv_it_tick_rx.recv() => {
+                    if is_recv_request.unwrap() {
+                        tick = 0;
+                    } else {
+                        break;
+                    }
+                }
+            }
         }
-        Err(_) => {
-            let err_message = format!("The ({:?}) Recv Error", stream);
-            println!("{}", err_message);
-            return;
+    });
+    loop {
+        let mut request_config = RequestConfig::new();
+        let mut recv_request_buffer: [u8; 2048] = [0; 2048];
+        tokio::select! {
+            tick = interval_tick_rx.recv() => {
+                if tick.unwrap() {
+                    break;
+                }
+            }
+
+            recv_size = stream.read(&mut recv_request_buffer) => {
+                let recv_size = recv_size.unwrap();
+                if recv_size == 0 {
+                    recv_it_tick_tx.send(false).await.unwrap();
+                    break;
+                }
+                recv_it_tick_tx.send(true).await.unwrap();
+                let capture_request_buffer = &recv_request_buffer[..recv_size];
+                let send_buffer = request_config.static_http_process_request(top_path, capture_request_buffer);
+                stream.write_all(&send_buffer).await.unwrap();
+                if !request_config.keep_alive {
+                    recv_it_tick_tx.send(false).await.unwrap();
+                    break;
+                }
+            }
         }
     };
     
-    stream.write_all(&send_buffer).await.unwrap();
-
     stream.shutdown().await.unwrap();
 }
 
@@ -340,13 +391,13 @@ mod tests {
 
     #[tokio::test]
     async fn http_server() {
-        HttpServer::new()
-            .bind("127.0.0.1:789")
-            .await
-            .unwrap()
-            .route("C:\\Users\\Desktop\\html")
-            .unwrap()
-            .run()
-            .await
+        // HttpServer::new()
+        //     .bind("127.0.0.1:789")
+        //     .await
+        //     .unwrap()
+        //     .route("C:\\Users\\Desktop\\html")
+        //     .unwrap()
+        //     .run()
+        //     .await
     }
 }

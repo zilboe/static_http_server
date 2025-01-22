@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub ip_port: String,
-    pub web_page: String
+    pub web_page: String,
+    pub keepalive_timeout: u64,
 }
 
 struct ConfigError<'a> {
@@ -69,5 +70,6 @@ mod tests {
         
         println!("{:?}", configs.ip_port);
         println!("{:?}", configs.web_port);
+        println!("{:?}", configs.keepalive_timeout);
     }
 }

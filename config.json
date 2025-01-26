@@ -1,0 +1,5 @@
+{
+    "ip_port": "127.0.0.1:80",
+    "web_page": "/var/www/html",
+    "keepalive_timeout": 60
+}

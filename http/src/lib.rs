@@ -13,25 +13,13 @@ use tokio::{
     time::interval
 };
 
+mod error;
 use chrono::{Days, Utc};
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
 use httparse::Request;
-struct HttpError {
-    message: String,
-    err_data: Vec<u8>,
-}
-
-impl From<io::Error> for HttpError {
-    fn from(error: io::Error) -> Self {
-        HttpError {
-            message: error.to_string(),
-            err_data: vec![],
-        }
-    }
-}
 
 #[warn(non_snake_case)]
 struct RequestConfig {
@@ -74,13 +62,13 @@ impl RequestConfig {
         }
     }
 
-    fn set_content_type(&mut self) -> Result<Vec<u8>, HttpError> {
+    fn set_content_type(&mut self) -> Result<Vec<u8>, error::HttpError> {
         let mut return_buffer: Vec<u8> = vec![];
         let file_name = match &self.request_path {
             Some(file) => file,
             None => {
                 let err_message = "There is No File For Request";
-                return Err(HttpError {
+                return Err(error::HttpError {
                     message: err_message.to_string(),
                     err_data: "HTTP/1.1 404 OK\r\n\r\n".as_bytes().to_vec(),
                 });
@@ -109,7 +97,7 @@ impl RequestConfig {
             }
             None => {
                 let err_message = format!("The File Name {} Error,No Dot", file_name);
-                return Err(HttpError {
+                return Err(error::HttpError {
                     message: err_message,
                     err_data: "HTTP/1.1 404 OK\r\n\r\n".as_bytes().to_vec(),
                 });
@@ -118,13 +106,13 @@ impl RequestConfig {
         Ok(return_buffer)
     }
 
-    fn sl_http_fill_file_buffer(&mut self) -> Result<Vec<u8>, HttpError> {
+    fn sl_http_fill_file_buffer(&mut self) -> Result<Vec<u8>, error::HttpError> {
         let mut file_buff: Vec<u8> = Vec::new();
         let file_name = match &self.request_path {
             Some(files) => files,
             None => {
                 let err_message = "There Is No File For Request";
-                return Err(HttpError {
+                return Err(error::HttpError {
                     message: err_message.to_string(),
                     err_data: vec![],
                 });
@@ -142,7 +130,7 @@ impl RequestConfig {
                                 Err(_) => {
                                     let err_message =
                                         format!("The File ({}) Encoder Gzip Error", file_name);
-                                    return Err(HttpError {
+                                    return Err(error::HttpError {
                                         message: err_message,
                                         err_data: vec![],
                                     });
@@ -151,7 +139,7 @@ impl RequestConfig {
                             Err(_) => {
                                 let err_message =
                                     format!("The File ({}) Encoder Gzip Error", file_name);
-                                return Err(HttpError {
+                                return Err(error::HttpError {
                                     message: err_message,
                                     err_data: vec![],
                                 });
@@ -174,7 +162,7 @@ impl RequestConfig {
                 }
                 Err(_) => {
                     let err_message = format!("Can't Read The File ({})", file_name);
-                    Err(HttpError {
+                    Err(error::HttpError {
                         message: err_message,
                         err_data: file_buff,
                     })
@@ -182,7 +170,7 @@ impl RequestConfig {
             },
             Err(_) => {
                 let err_message = format!("Can't Open The File ({})", file_name);
-                Err(HttpError {
+                Err(error::HttpError {
                     message: err_message,
                     err_data: file_buff,
                 })

@@ -4,6 +4,8 @@ use http::HttpServer;
 #[tokio::main]
 async fn main() {
     let config = Config::read_config().unwrap();
+
+    
     HttpServer::new()
         .bind(&config.ip_port).await.unwrap()
         .route(&config.web_page).unwrap()

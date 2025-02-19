@@ -43,8 +43,6 @@ impl RequestConfig {
 
     fn set_keep_alive(&mut self, keep_alive_value: &str) {
         self.keep_alive = keep_alive_value == "keep-alive";
-        // println!("{}", self.keep_alive);
-        // println!("{}", keep_alive_value);
     }
 
     fn set_request_path_is_exist(&mut self, top_path: &str, uri_path: &str) -> bool {
